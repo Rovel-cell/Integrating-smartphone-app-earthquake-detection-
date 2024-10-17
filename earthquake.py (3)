@@ -1,0 +1,68 @@
+#include <Wire.h>
+#include <MPU6050.h>
+#include <SoftwareSerial.h>
+
+// Initialize MPU6050
+MPU6050 mpu;
+
+// Define threshold for P-waves
+const float P_WAVE_THRESHOLD = 4.5;
+
+// SMS and Speaker setup
+SoftwareSerial mySerial(10, 11); // RX, TX for GSM module or Serial communication with a GSM module
+int speakerPin = 9; // Define speaker pin
+
+// Function to send SMS alert using Mailgun API
+void sendSMSAlert(String message) {
+  mySerial.println("AT+CMGF=1"); // Set GSM to text mode
+  delay(1000);
+  mySerial.println("AT+CMGS=\"+639988050681\""); // Replace with actual recipient number
+  delay(1000);
+  mySerial.println(message);  // SMS content
+  delay(1000);
+  mySerial.write(26);  // Send CTRL+Z to send the message
+  delay(1000);
+}
+
+// Function to play speaker alert
+void playSpeakerAlert() {
+  tone(speakerPin, 1000);  // Plays sound on the speaker
+  delay(5000);             // Play for 5 seconds
+  noTone(speakerPin);      // Stop sound
+}
+
+// Setup function to initialize the MPU6050 and serial
+void setup() {
+  Wire.begin();
+  Serial.begin(9600);
+  mySerial.begin(9600);  // Initialize Software Serial for GSM
+
+  // Initialize MPU6050
+  if (!mpu.begin(MPU6050_SCALE_2000DPS, MPU6050_RANGE_2G)) {
+    Serial.println("Could not find a valid MPU6050 sensor!");
+    while (1);
+  }
+
+  // Configure the MPU6050 sensor
+  mpu.setThreshold(3);  // Set the motion detection threshold
+  pinMode(speakerPin, OUTPUT);  // Set speaker pin as output
+}
+
+// Main loop to detect P-waves and send alerts
+void loop() {
+  Vector rawAccel = mpu.readRawAccel();
+  float totalAcceleration = sqrt(sq(rawAccel.XAxis) + sq(rawAccel.YAxis) + sq(rawAccel.ZAxis)) / 16384.0;
+
+  // Check if total acceleration exceeds the P-wave threshold
+  if (totalAcceleration > P_WAVE_THRESHOLD) {
+    Serial.println("P-wave detected!");
+    
+    // Send SMS Alert
+    sendSMSAlert("Earthquake detected! P-wave detected, take cover!");
+
+    // Play Speaker Alert
+    playSpeakerAlert();
+  }
+  
+  delay(1000);  // Check every second
+}
